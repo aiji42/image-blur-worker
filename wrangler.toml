@@ -2,6 +2,8 @@ name = "image-blur-worker"
 main = "src/index.ts"
 compatibility_date = "2023-10-25"
 
+route = { pattern = "img-optmize.aiji42.com/*", zone_name = "aiji42.com" }
+
 # Variable bindings. These are arbitrary, plaintext strings (similar to environment variables)
 # Note: Use secrets to store sensitive data.
 # Docs: https://developers.cloudflare.com/workers/platform/environment-variables
