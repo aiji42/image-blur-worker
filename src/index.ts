@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import swScript from '../public/service-worker.js'
-import loadSwScript from '../public/load-sw.js'
+import imageLoaderScript from '../public/image-loader.js';
 const app = new Hono();
 
 app.get('/_blur/:src', (c) => {
@@ -9,24 +8,18 @@ app.get('/_blur/:src', (c) => {
 	return fetch(src, {
 		cf: {
 			image: {
-				blur: 100,
+				blur: 64,
 				fit: 'scale-down',
 				width: 200,
 				height: 200,
 				format: 'webp',
-				quality: 60,
+				quality: 50,
 			},
 			cacheEverything: true,
 			cacheTtl: 3600,
 		},
 	});
 });
-
-app.get('/service-worker.js', (c) => {
-	return c.body(swScript, 200, {
-		'Content-Type': 'text/javascript'
-	})
-})
 
 app.get('*', async (c) => {
 	const proxiedUrl = new URL(c.req.url);
@@ -35,7 +28,10 @@ app.get('*', async (c) => {
 	const isHtml = res.headers.get('content-type')?.includes('text/html');
 	if (!isHtml || c.req.query('raw')) return res;
 
-	return new HTMLRewriter().on(LoadSW.selector, new LoadSW()).on(ImageSrcRewriter.selector, new ImageSrcRewriter()).transform(res);
+	return new HTMLRewriter()
+		.on(ImageLoaderScript.selector, new ImageLoaderScript())
+		.on(ImageSrcRewriter.selector, new ImageSrcRewriter())
+		.transform(res);
 });
 
 export default app;
@@ -46,13 +42,13 @@ class ImageSrcRewriter implements HTMLRewriterElementContentHandlers {
 		const src = element.getAttribute('src');
 		if (!src) return;
 		element.setAttribute('src', `/_blur/${encodeURIComponent(src)}`);
-		element.setAttribute('data-original-src', src);
+		element.setAttribute('data-src', src);
 	}
 }
 
-class LoadSW implements HTMLRewriterElementContentHandlers {
-	static selector = 'head'
+class ImageLoaderScript implements HTMLRewriterElementContentHandlers {
+	static selector = 'body';
 	element(element: Element) {
-		element.append(`<script>${loadSwScript}</script>`, { html: true })
+		element.append(`<script>${imageLoaderScript}</script>`, { html: true });
 	}
 }
