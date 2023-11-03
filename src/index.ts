@@ -2,23 +2,25 @@ import { Hono } from 'hono';
 import imageLoaderScript from '../public/image-loader.js';
 const app = new Hono();
 
+const blurFetchOption = {
+	cf: {
+		image: {
+			blur: 64,
+			fit: 'scale-down',
+			width: 200,
+			height: 200,
+			format: 'webp',
+			quality: 50,
+		},
+		cacheEverything: true,
+		cacheTtl: 3600,
+	},
+} as const;
+
 app.get('/_blur/:src', (c) => {
 	const src = c.req.param('src');
 
-	return fetch(src, {
-		cf: {
-			image: {
-				blur: 64,
-				fit: 'scale-down',
-				width: 200,
-				height: 200,
-				format: 'webp',
-				quality: 50,
-			},
-			cacheEverything: true,
-			cacheTtl: 3600,
-		},
-	});
+	return fetch(src, blurFetchOption);
 });
 
 app.get('*', async (c) => {
@@ -28,21 +30,30 @@ app.get('*', async (c) => {
 	const isHtml = res.headers.get('content-type')?.includes('text/html');
 	if (!isHtml || c.req.query('raw')) return res;
 
-	return new HTMLRewriter()
+	const imgSrcRewriter = new ImageSrcRewriter();
+
+	const rewroteResponse = new HTMLRewriter()
 		.on(ImageLoaderScript.selector, new ImageLoaderScript())
-		.on(ImageSrcRewriter.selector, new ImageSrcRewriter())
+		.on(ImageSrcRewriter.selector, imgSrcRewriter)
 		.transform(res);
+
+	c.executionCtx.waitUntil(Promise.allSettled([...imgSrcRewriter.srcSet].map((src) => fetch(src, blurFetchOption))));
+
+	return rewroteResponse;
 });
 
 export default app;
 
 class ImageSrcRewriter implements HTMLRewriterElementContentHandlers {
 	static selector = 'img';
+	public srcSet: Set<string> = new Set();
 	element(element: Element) {
 		const src = element.getAttribute('src');
 		if (!src) return;
 		element.setAttribute('src', `/_blur/${encodeURIComponent(src)}`);
 		element.setAttribute('data-src', src);
+
+		this.srcSet.add(src);
 	}
 }
 
