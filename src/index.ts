@@ -35,6 +35,7 @@ app.get('*', async (c) => {
 	const rewroteResponse = new HTMLRewriter()
 		.on(ImageLoaderScript.selector, new ImageLoaderScript())
 		.on(ImageSrcRewriter.selector, imgSrcRewriter)
+		.on(EmbeddedCss.selector, new EmbeddedCss(proxiedUrl.toString()))
 		.transform(res);
 
 	c.executionCtx.waitUntil(Promise.allSettled([...imgSrcRewriter.srcSet].map((src) => fetch(src, blurFetchOption))));
@@ -54,6 +55,27 @@ class ImageSrcRewriter implements HTMLRewriterElementContentHandlers {
 		element.setAttribute('data-src', src);
 
 		this.srcSet.add(src);
+	}
+}
+
+class EmbeddedCss implements HTMLRewriterElementContentHandlers {
+	static selector = 'link';
+	private baseUrl = '';
+	constructor(baseUrl: string) {
+		this.baseUrl = baseUrl;
+	}
+	async element(element: Element) {
+		const href = element.getAttribute('href');
+		if (element.getAttribute('rel') === 'stylesheet' && href) {
+			const res = await fetch(new URL(href, this.baseUrl), {
+				cf: {
+					cacheEverything: true,
+					cacheTtl: 3600,
+				},
+			});
+			const css = await res.text();
+			element.replace(`<style>${css}</style>`, { html: true });
+		}
 	}
 }
 
