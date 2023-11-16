@@ -31,14 +31,18 @@ app.get('*', async (c) => {
 	if (!isHtml || c.req.query('raw')) return res;
 
 	const imgSrcRewriter = new ImageSrcRewriter();
-
 	const rewroteResponse = new HTMLRewriter()
 		.on(ImageLoaderScript.selector, new ImageLoaderScript())
 		.on(ImageSrcRewriter.selector, imgSrcRewriter)
 		.on(EmbeddedCss.selector, new EmbeddedCss(proxiedUrl.toString()))
 		.transform(res);
 
-	c.executionCtx.waitUntil(Promise.allSettled([...imgSrcRewriter.srcSet].map((src) => fetch(src, blurFetchOption))));
+	c.executionCtx.waitUntil(
+		(async (res: Response) => {
+			await res.arrayBuffer();
+			await Promise.allSettled([...imgSrcRewriter.srcSet].map((src) => fetch(src, blurFetchOption)));
+		})(rewroteResponse.clone()),
+	);
 
 	return rewroteResponse;
 });
