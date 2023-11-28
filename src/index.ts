@@ -24,17 +24,14 @@ app.get('/_blur/:src', (c) => {
 });
 
 app.get('*', async (c) => {
-	const proxiedUrl = new URL(c.req.url);
-	proxiedUrl.host = 'image-gallery-example-neon.vercel.app';
-	const res = await fetch(proxiedUrl, c.req.raw);
+	const res = await fetch(proxy(c.req.url), c.req.raw);
 	const isHtml = res.headers.get('content-type')?.includes('text/html');
 	if (!isHtml || c.req.query('raw')) return res;
 
 	const imgSrcRewriter = new ImageSrcRewriter();
 	const rewroteResponse = new HTMLRewriter()
-		.on(ImageLoaderScript.selector, new ImageLoaderScript())
 		.on(ImageSrcRewriter.selector, imgSrcRewriter)
-		.on(EmbeddedCss.selector, new EmbeddedCss(proxiedUrl.toString()))
+		.on(ImageLoaderScript.selector, new ImageLoaderScript())
 		.transform(res);
 
 	c.executionCtx.waitUntil(
@@ -49,6 +46,15 @@ app.get('*', async (c) => {
 
 export default app;
 
+const proxy = (_url: string) => {
+	const url = new URL(_url);
+	url.protocol = 'https';
+	url.hostname = 'image-gallery-example-neon.vercel.app';
+	url.port = '';
+
+	return url;
+};
+
 class ImageSrcRewriter implements HTMLRewriterElementContentHandlers {
 	static selector = 'img';
 	public srcSet: Set<string> = new Set();
@@ -59,27 +65,6 @@ class ImageSrcRewriter implements HTMLRewriterElementContentHandlers {
 		element.setAttribute('data-src', src);
 
 		this.srcSet.add(src);
-	}
-}
-
-class EmbeddedCss implements HTMLRewriterElementContentHandlers {
-	static selector = 'link';
-	private baseUrl = '';
-	constructor(baseUrl: string) {
-		this.baseUrl = baseUrl;
-	}
-	async element(element: Element) {
-		const href = element.getAttribute('href');
-		if (element.getAttribute('rel') === 'stylesheet' && href) {
-			const res = await fetch(new URL(href, this.baseUrl), {
-				cf: {
-					cacheEverything: true,
-					cacheTtl: 3600,
-				},
-			});
-			const css = await res.text();
-			element.replace(`<style>${css}</style>`, { html: true });
-		}
 	}
 }
 
